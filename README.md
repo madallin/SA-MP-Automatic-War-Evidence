@@ -1,6 +1,6 @@
 # SA-MP Automatic War Evidence
 
-A simple, automated Python tool that generates faction war evidence (Excel and HTML reports) for SA-MP RPG servers. 
+A simple, automated Python tool that generates faction war evidence (Excel and HTML reports) for SA-MP. 
 
 Instead of manually checking every player's seconds and score, this script does it for you. It reads the war logs directly from the server's website, checks if players were excused or inactive, excludes staff members, and automatically calculates the fines or faction warns based on the results.
 
