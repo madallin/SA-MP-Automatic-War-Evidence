@@ -145,6 +145,42 @@ def format_score(kills, deaths):
     if diff == 0: str_val = "0"
     return str_val, diff
 
+def format_signed(value):
+    if value > 0: return f"+{value}"
+    if value == 0: return "0"
+    return str(value)
+
+def find_kd_column_index(table):
+    # Looks at the header row of the stats table and returns the index of a
+    # column labeled K/D (or a close variant). Returns None if no such column exists,
+    # so callers can fall back to computing it from separate Kills/Deaths columns.
+    rows = table.find_all('tr')
+    if not rows: return None
+    header_cells = rows[0].find_all(['th', 'td'])
+    kd_labels = {'k/d', 'kd', 'k-d', 'scor', 'score'}
+    for idx, cell in enumerate(header_cells):
+        label = cell.get_text(strip=True).lower().replace(' ', '')
+        if label in kd_labels:
+            return idx
+    return None
+
+def parse_kd_value(text):
+    # Handles a K/D cell already shown as a signed difference ("+5", "-3", "0", "5"),
+    # or as a kills/deaths pair ("12/8" or "12-8"), in which case it's reduced to the difference.
+    if not text: return None
+    text = text.strip()
+    pair_match = re.match(r'^(-?\d+)\s*[/\-]\s*(-?\d+)$', text)
+    if pair_match:
+        try:
+            k = int(pair_match.group(1)); d = int(pair_match.group(2))
+            return k - d
+        except: return None
+    signed_match = re.match(r'^([+-]?\d+)$', text)
+    if signed_match:
+        try: return int(signed_match.group(1))
+        except: return None
+    return None
+
 def process_war_details(war_url, war_index, target_table_index, is_lost, members_db, cookie_jar, staff_list_ids):
     print(f"[*] Descarc datele War #{war_index}...")
     soup = get_soup(war_url, cookie_jar)
@@ -158,6 +194,7 @@ def process_war_details(war_url, war_index, target_table_index, is_lost, members
     
     if not stat_tables: return
     target_table = stat_tables[target_table_index] if target_table_index < len(stat_tables) else stat_tables[0]
+    kd_col_idx = find_kd_column_index(target_table)
 
     rows = target_table.find_all('tr')[1:] 
     for row in rows:
@@ -203,15 +240,25 @@ def process_war_details(war_url, war_index, target_table_index, is_lost, members
         score_str = "0"
         kills = 0
         deaths = 0
-        try:
-            if len(cols) > 5:
-                kills = int(cols[4].get_text(strip=True))
-                deaths = int(cols[5].get_text(strip=True))
-            else:
-                kills = int(cols[1].get_text(strip=True))
-                deaths = int(cols[2].get_text(strip=True))
-            score_str, score_val = format_score(kills, deaths)
-        except: pass
+        kd_found = False
+
+        if kd_col_idx is not None and kd_col_idx < len(cols):
+            parsed = parse_kd_value(cols[kd_col_idx].get_text(strip=True))
+            if parsed is not None:
+                score_val = parsed
+                score_str = format_signed(score_val)
+                kd_found = True
+
+        if not kd_found:
+            try:
+                if len(cols) > 5:
+                    kills = int(cols[4].get_text(strip=True))
+                    deaths = int(cols[5].get_text(strip=True))
+                else:
+                    kills = int(cols[1].get_text(strip=True))
+                    deaths = int(cols[2].get_text(strip=True))
+                score_str, score_val = format_score(kills, deaths)
+            except: pass
 
         if clean_name not in members_db: members_db[clean_name] = {"wars_data": {}}
         
@@ -227,8 +274,21 @@ def process_war_details(war_url, war_index, target_table_index, is_lost, members
 
 def calculate_activity_sanction(total_wars, absences):
     sanctions = []
-    if total_wars == 4:
+    if total_wars == 6:
         if absences == 1: sanctions.append("Amenda $25000")
+        if absences == 2: sanctions.append("Amenda $50000")
+        if absences == 3: sanctions.append("AV")
+        if absences == 4: sanctions.append("AV"); sanctions.append("Amenda $25000")
+        if absences == 5: sanctions.append("AV"); sanctions.append("Amenda $50000")
+        if absences == 6: sanctions.append("FW")
+    elif total_wars == 5:
+        if absences == 1: sanctions.append("Amenda $25000")
+        if absences == 2: sanctions.append("Amenda $50000")
+        if absences == 3: sanctions.append("AV")
+        if absences == 4: sanctions.append("AV"); sanctions.append("Amenda $50000")
+        if absences == 5: sanctions.append("FW")
+    elif total_wars == 4:
+        if absences == 1: sanctions.append("Amenda $50000")
         if absences == 2: sanctions.append("AV")
         if absences == 3: sanctions.append("AV"); sanctions.append("Amenda $50000")
         if absences == 4: sanctions.append("FW")
@@ -433,7 +493,7 @@ def save_styled_excel(filename, members_db, total_wars, min_seconds_req, use_wor
             sec_req = min_seconds_req.get(i, 0)
             ws.merge_range(0, col_idx, 0, col_idx+1, f'War {i} ({sec_req}s)', header_fmt)
             ws.write(1, col_idx, 'Secunde', subheader_fmt)
-            ws.write(1, col_idx+1, 'Scor', subheader_fmt)
+            ws.write(1, col_idx+1, 'K/D', subheader_fmt)
             col_idx += 2
         
         start_result_col = col_idx
