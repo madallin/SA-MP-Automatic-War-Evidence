@@ -151,9 +151,6 @@ def format_signed(value):
     return str(value)
 
 def find_kd_column_index(table):
-    # Looks at the header row of the stats table and returns the index of a
-    # column labeled K/D (or a close variant). Returns None if no such column exists,
-    # so callers can fall back to computing it from separate Kills/Deaths columns.
     rows = table.find_all('tr')
     if not rows: return None
     header_cells = rows[0].find_all(['th', 'td'])
@@ -165,8 +162,6 @@ def find_kd_column_index(table):
     return None
 
 def parse_kd_value(text):
-    # Handles a K/D cell already shown as a signed difference ("+5", "-3", "0", "5"),
-    # or as a kills/deaths pair ("12/8" or "12-8"), in which case it's reduced to the difference.
     if not text: return None
     text = text.strip()
     pair_match = re.match(r'^(-?\d+)\s*[/\-]\s*(-?\d+)$', text)
